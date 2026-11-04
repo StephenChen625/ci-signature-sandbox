@@ -1,0 +1,30 @@
+{
+  "concurrency": {
+    "cancel-in-progress": false,
+    "group": "public-synthetic-once"
+  },
+  "jobs": {
+    "probe": {
+      "permissions": {
+        "contents": "read",
+        "id-token": "write"
+      },
+      "uses": "StephenChen625/ci-signature-sandbox/.github/workflows/signer.yml@4bfb0bd0dd8a2f698b8a9d48e97fe263a16701ca",
+      "with": {
+        "base_commit": "4bfb0bd0dd8a2f698b8a9d48e97fe263a16701ca"
+      }
+    }
+  },
+  "name": "Public synthetic once",
+  "on": {
+    "push": {
+      "branches": [
+        "main"
+      ],
+      "paths": [
+        "fixtures/probe.txt"
+      ]
+    }
+  },
+  "permissions": {}
+}
