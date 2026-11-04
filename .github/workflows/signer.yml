@@ -1,0 +1,50 @@
+{
+  "jobs": {
+    "sign": {
+      "if": "${{ github.repository == 'StephenChen625/ci-signature-sandbox' && github.repository_id == '1445656999' && github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_attempt == 1 && github.event.repository.private == false }}",
+      "permissions": {
+        "contents": "read",
+        "id-token": "write"
+      },
+      "runs-on": "ubuntu-24.04",
+      "steps": [
+        {
+          "uses": "actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803",
+          "with": {
+            "fetch-depth": 0,
+            "lfs": false,
+            "persist-credentials": false,
+            "ref": "${{ github.sha }}",
+            "submodules": false
+          }
+        },
+        {
+          "name": "Validate frozen inputs before execution",
+          "run": "python3 -I -B - <<'PYVERIFY'\nimport hashlib,pathlib\nexpected={'.ci/driver.py': 'a32850c7d1c96256cead322bfe7b77c2482aabc24a5c0db1e903c03505e273bb', '.ci/binding.json': '94b4cf200674525c7751f7fb9d7ed4e047113476990e4f13b678f9e6354da3fa', '.ci/trusted-root.json': '6494e21ea73fa7ee769f85f57d5a3e6a08725eae1e38c755fc3517c9e6bc0b66'}\nfor n,h in expected.items():\n p=pathlib.Path(n)\n assert p.is_file() and not p.is_symlink() and hashlib.sha256(p.read_bytes()).hexdigest()==h\nPYVERIFY\n",
+          "shell": "bash"
+        },
+        {
+          "env": {
+            "BASE_COMMIT": "${{ inputs.base_commit }}"
+          },
+          "name": "One bounded synthetic signature",
+          "run": "python3 -I -B .ci/driver.py",
+          "shell": "bash"
+        }
+      ],
+      "timeout-minutes": 15
+    }
+  },
+  "name": "Public synthetic signer",
+  "on": {
+    "workflow_call": {
+      "inputs": {
+        "base_commit": {
+          "required": true,
+          "type": "string"
+        }
+      }
+    }
+  },
+  "permissions": {}
+}
