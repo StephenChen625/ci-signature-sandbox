@@ -1,0 +1,31 @@
+{
+  "name": "CNB synthetic source sync once",
+  "on": {
+    "workflow_dispatch": {}
+  },
+  "permissions": {
+    "contents": "read"
+  },
+  "concurrency": {
+    "group": "cnb-synthetic-sync-once",
+    "cancel-in-progress": false
+  },
+  "jobs": {
+    "sync": {
+      "if": "github.repository_id == '1445656999' && github.repository == 'StephenChen625/ci-signature-sandbox' && github.actor == 'StephenChen625' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.run_attempt == 1",
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 10,
+      "environment": "cnb-source-sync-test",
+      "steps": [
+        {
+          "name": "Synthetic HTTPS branch push and exact readback",
+          "env": {
+            "CNB_SYNC_TEST_TOKEN": "${{ secrets.CNB_SYNC_TEST_TOKEN }}"
+          },
+          "shell": "python",
+          "run": "import hashlib,json,os,pathlib,re,subprocess,tempfile,time\nremote='https://cnb.cool/swgmath-ci-sandbox-20261105/deployment-smoke-test.git'\nbranch='cnb-sync-smoke-20261105'\nassert os.environ.get('GITHUB_REPOSITORY')=='StephenChen625/ci-signature-sandbox'\nassert os.environ.get('GITHUB_EVENT_NAME')=='workflow_dispatch'\nassert os.environ.get('GITHUB_REF')=='refs/heads/main'\nassert os.environ.get('GITHUB_RUN_ATTEMPT')=='1'\nassert os.environ.get('GITHUB_ACTOR')=='StephenChen625'\ntoken=os.environ.get('CNB_SYNC_TEST_TOKEN','')\nassert token and '\\n' not in token and '\\r' not in token\nstarted=time.monotonic()\nwith tempfile.TemporaryDirectory(prefix='cnb-sync-') as td:\n p=pathlib.Path(td);os.chmod(p,0o700)\n env={k:v for k,v in os.environ.items() if k in ('PATH','CNB_SYNC_TEST_TOKEN')}\n env.update(HOME=td,GIT_CONFIG_NOSYSTEM='1',GIT_CONFIG_GLOBAL='/dev/null',GIT_TERMINAL_PROMPT='0',GIT_ALLOW_PROTOCOL='https',LC_ALL='C')\n ask=p/'askpass.py'\n ask.write_text(\"#!/usr/bin/env python3\\nimport os,sys\\np=sys.argv[1]\\nr='cnb.cool/swgmath-ci-sandbox-20261105/deployment-smoke-test.git'\\nif p==\\\"Username for 'https://\\\"+r+\\\"': \\\": print('cnb')\\nelif p==\\\"Password for 'https://cnb@\\\"+r+\\\"': \\\": print(os.environ['CNB_SYNC_TEST_TOKEN'])\\nelse: sys.exit(2)\\n\")\n ask.chmod(0o700);env['GIT_ASKPASS']=str(ask)\n repo=p/'repo';repo.mkdir()\n def git(args):\n  left=480-(time.monotonic()-started)\n  if left<=0: raise RuntimeError('TOTAL_TIMEOUT_NO_RETRY')\n  r=subprocess.run(['git','-c','credential.helper=','-c','credential.useHttpPath=true','-c','http.followRedirects=false','-c','http.sslVerify=true','-c','http.lowSpeedLimit=1','-c','http.lowSpeedTime=45',*args],cwd=repo,env=env,capture_output=True,timeout=min(90,left))\n  if r.returncode: raise RuntimeError('GIT_OPERATION_FAILED_NO_RETRY rc='+str(r.returncode)+' stderr_bytes='+str(len(r.stderr)))\n  assert len(r.stdout)<65536\n  return r.stdout\n git(['init','-q','--initial-branch='+branch])\n git(['config','user.name','Synthetic CNB sync test'])\n git(['config','user.email','synthetic@example.invalid'])\n git(['remote','add','target',remote])\n before_main=git(['ls-remote','--heads','target','refs/heads/main'])\n assert re.fullmatch(rb'[0-9a-f]{40}\\trefs/heads/main\\n',before_main)\n assert git(['ls-remote','--heads','target','refs/heads/'+branch])==b'', 'DEST_BRANCH_EXISTS_NO_REPLAY'\n message=b'GitHub to CNB synthetic source sync v1\\n'\n (repo/'README.txt').write_bytes(message)\n # Explicit configuration with no handler for the pushed branch/event.\n (repo/'.cnb.yml').write_text('main:\\n  web_trigger_sync_placeholder:\\n    - stages:\\n        - name: synthetic-placeholder\\n          script: echo synthetic-only\\n')\n git(['add','--','README.txt','.cnb.yml']);git(['commit','-q','-m','Synthetic source transport only'])\n head=git(['rev-parse','HEAD']).strip();assert re.fullmatch(rb'[0-9a-f]{40}',head)\n print('SYNTHETIC_PUSH_START',flush=True)\n git(['push','--porcelain','target','HEAD:refs/heads/'+branch])\n actual=git(['ls-remote','--heads','target','refs/heads/'+branch])\n assert actual==head+b'\\trefs/heads/'+branch.encode()+b'\\n'\n git(['fetch','--no-tags','target','refs/heads/'+branch])\n assert git(['rev-parse','FETCH_HEAD']).strip()==head\n assert git(['show','FETCH_HEAD:README.txt'])==message\n assert git(['ls-tree','--name-only','FETCH_HEAD'])==b'.cnb.yml\\nREADME.txt\\n'\n assert git(['ls-remote','--heads','target','refs/heads/main'])==before_main\n print(json.dumps({'state':'SYNTHETIC_BRANCH_PUSH_AND_READBACK_PASS','branch':branch,'commit':head.decode(),'tree':git(['rev-parse','HEAD^{tree}']).strip().decode(),'message_sha256':hashlib.sha256(message).hexdigest(),'main_unchanged':True,'seconds':round(time.monotonic()-started,3),'no_build_no_server_no_production':True}),flush=True)\n"
+        }
+      ]
+    }
+  }
+}
